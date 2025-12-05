@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>7ch</title>
+
+<style>
+  body { font-family: Arial, sans-serif; background: #f3f3f3; padding: 20px; }
+  h1 { text-align: center; }
+  #container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; }
+
+  .thread { padding: 10px 0; border-bottom: 1px solid #ccc; }
+  .message {
+    background: #fafafa; border: 1px solid #ddd;
+    padding: 10px; margin-bottom: 10px; border-radius: 6px;
+  }
+  .replyTo { color: #0077ff; }
+
+  #chatBox {
+    height: 380px; overflow-y: auto; border: 1px solid #aaa;
+    padding: 10px; margin-bottom: 10px; background: #fff;
+  }
+
+  input, textarea { width: 100%; padding: 8px; margin-top: 5px; }
+  button { padding: 8px 15px; margin-top: 8px; cursor: pointer; }
+
+  img.chatImage { max-width: 200px; margin-top: 6px; border-radius: 4px; border: 1px solid #ccc; }
+  a { cursor: pointer; }
+</style>
+</head>
+<body>
+
+<h1>7ch</h1>
+
+<div id="container">
+
+  <!-- スレ一覧 -->
+  <div id="threadListPage">
+    <h2>スレ一覧</h2>
+    <div id="threadList"></div>
+
+    <h3>新規スレ作成</h3>
+    <input id="newThreadTitle" placeholder="スレタイを入力">
+    <button onclick="createThread()">スレを立てる</button>
+  </div>
+
+  <!-- チャット画面 -->
+  <div id="chatPage" style="display:none;">
+    <h2 id="chatTitle"></h2>
+    <a onclick="backToList()">← スレ一覧にもどる</a>
+
+    <div id="chatBox"></div>
+
+    <input id="chatName" placeholder="名前(任意)">
+    <input id="replyTarget" placeholder="返信先番号 (任意)">
+    <textarea id="chatMessage" placeholder="メッセージ内容"></textarea>
+
+    <p>画像アップロード</p>
+    <input type="file" id="chatImage" accept="image/*">
+
+    <button onclick="sendMessage()">送信</button>
+  </div>
+
+</div>
+
+<script>
+let threads = JSON.parse(localStorage.getItem("threads_chat") || "[]");
+let currentThread = null;
+/* ------------------------------
+レ一覧表示
+-------------------------- */
+function showThreadList() {
+  const list = document.getElementById("threadList");
+  list.innerHTML = "";
+  threads.forEach((t, i) => {
+    const div = document.createElement("div");
+    div.className = "thread";
+    div.innerHTML = `
+  <a onclick="openChat(${ i })">${ t.title }</a><br>
+  <small>${ t.messages.length } 件</small>
+`;
+    list.appendChild(div);
+  });
+}
+showThreadList();
+/* ------------------------------
+レ作成
+-------------------------- */
+function createThread() {
+  const title = document.getElementById("newThreadTitle").value.trim();
+  if (!title) {
+    return;
+  }
+  threads.push({
+    title,
+    messages: []
+  });
+  save();
+  document.getElementById("newThreadTitle").value = "";
+  showThreadList();
+}
+/* ------------------------------
+レを開く
+-------------------------- */
+function openChat(id) {
+  currentThread = id;
+  document.getElementById("chatTitle").textContent = threads[id].title;
+  document.getElementById("threadListPage").style.display = "none";
+  document.getElementById("chatPage").style.display = "block";
+  showChat();
+}
+/* ------------------------------
+動リンク化
+-------------------------- */
+function autoLink(text) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return text.replace(urlRegex, url => `<a href="${ url }" target="_blank">${ url }</a>`);
+}
+/* ------------------------------
+ャット描画
+-------------------------- */
+function showChat() {
+  const chatBox = document.getElementById("chatBox");
+  chatBox.innerHTML = "";
+  threads[currentThread].messages.forEach((m, i) => {
+    const div = document.createElement("div");
+    div.className = "message";
+    let msg = `<b>#${ i } : ${ m.name }</b><br>`;
+    if (m.replyTo !== null) {
+      msg += `<span class="replyTo">>>${ m.replyTo }</span><br>`;
+    }
+    msg += `${ autoLink(m.text) }<br><small>${ m.time }</small>`;
+    if (m.image) {
+      msg += `<br><img class="chatImage" src="${ m.image }">`;
+    }
+    div.innerHTML = msg;
+    chatBox.appendChild(div);
+  });
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+/* ------------------------------
+信
+-------------------------- */
+function sendMessage() {
+  const name = document.getElementById("chatName").value.trim() || "名無しさん";
+  const text = document.getElementById("chatMessage").value.trim();
+  const replyTo = document.getElementById("replyTarget").value.trim();
+  const imgFile = document.getElementById("chatImage").files[0];
+  if (!text && !imgFile) {
+    return;
+  }
+  if (imgFile) {
+    const reader = new FileReader();
+    reader.onload = () => addMessage(name, text, replyTo, reader.result);
+    reader.readAsDataURL(imgFile);
+  } else {
+    addMessage(name, text, replyTo, null);
+  }
+  document.getElementById("chatMessage").value = "";
+  document.getElementById("replyTarget").value = "";
+  document.getElementById("chatImage").value = "";
+}
+/* ------------------------------
+ッセージ追加
+-------------------------- */
+function addMessage(name, text, replyTo, img) {
+  threads[currentThread].messages.push({
+    name,
+    text,
+    replyTo: replyTo ? parseInt(replyTo) : null,
+    image: img,
+    time: new Date().toLocaleString()
+  });
+  save();
+  showChat();
+}
+/* ------------------------------
+レ一覧に戻る
+-------------------------- */
+function backToList() {
+  document.getElementById("chatPage").style.display = "none";
+  document.getElementById("threadListPage").style.display = "block";
+}
+/* ------------------------------
+存
+-------------------------- */
+function save() {
+  localStorage.setItem("threads_chat", JSON.stringify(threads));
+}
+/* ------------------------------
+動更新(1秒)
+-------------------------- */
+setInterval(() => {
+  if (document.getElementById("chatPage").style.display !== "none") {
+    threads = JSON.parse(localStorage.getItem("threads_chat") || "[]");
+    showChat();
+  }
+}, 1000);
+</script>
+</body>
+</html>
